@@ -1,67 +1,70 @@
-# main.py
 import os
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# 1. Setup App
 app = FastAPI()
 
-# Allow your Frontend to talk to this Backend
+# 1. CORS Setup (Allows your frontend to talk to this backend)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. Define the Request Structure
+# 2. Input Structure
 class QueryRequest(BaseModel):
     query: str
 
-# 3. The Logic
+# 3. Home Route (To check if server is running)
+@app.get("/")
+def home():
+    return {"status": "Alive", "message": "RAG Backend is running"}
+
+# 4. Chat Route
 @app.post("/chat")
 async def chat(request: QueryRequest):
-    # Load keys from Environment Variables (We set these in Render later)
+    # Load keys (Ensure these are set in your Render Dashboard)
     API_KEY = os.environ.get("GEMINI_API_KEY")
     STORE_ID = os.environ.get("STORE_ID")
 
     if not API_KEY or not STORE_ID:
-        raise HTTPException(status_code=500, detail="Missing API Key or Store ID")
+        raise HTTPException(status_code=500, detail="Missing Keys on Server")
 
-    # The Endpoint for Gemini 1.5 Flash
+    # API Endpoint
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-002:generateContent?key={API_KEY}"
 
-    # The Payload (Connecting your specific Knowledge Base)
+    # ✅ FIXED PAYLOAD
     payload = {
         "contents": [{
             "parts": [{"text": request.query}]
         }],
         "tools": [{
             "file_search": {
-                "retrieval_tool": {
-                    "source": {
-                        "file_search_store": {"name": STORE_ID}
-                    }
-                }
+                "file_search_store_names": [STORE_ID]
             }
         }]
     }
 
     try:
-        # Call Google
+        # Send Request to Google
         response = requests.post(url, json=payload, headers={"Content-Type": "application/json"})
+        
+        # Check for non-200 errors
+        if response.status_code != 200:
+            return {"answer": f"Google Error ({response.status_code}): {response.text}"}
+
         data = response.json()
 
-        # Extract the Answer
-        # (Navigates the JSON tree to find the text)
+        # Extract Answer safely
         try:
             answer = data['candidates'][0]['content']['parts'][0]['text']
-        except (KeyError, IndexError):
-            answer = "I couldn't find an answer in the documents."
+        except (KeyError, IndexError, TypeError):
+            answer = "I couldn't find an answer in the documents. (Check if the PDF has relevant info)"
 
         return {"answer": answer}
 
     except Exception as e:
-        return {"answer": f"Error contacting Google: {str(e)}"}
+        return {"answer": f"Server Error: {str(e)}"}
