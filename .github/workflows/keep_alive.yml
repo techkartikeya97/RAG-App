@@ -1,0 +1,16 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every day
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows you to run it manually to test
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        # We use curl to send a simple request to your project
+        # Replace the URL below with YOUR Supabase Project URL
+        run: curl -I https://chdlpyhzxdsyalzpyrwh.supabase.co
